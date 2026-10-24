@@ -16,7 +16,6 @@ export interface AuthenticatedRequest extends Request {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.set('trust proxy', 1);
-  app.setGlobalPrefix('api');
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
@@ -32,7 +31,8 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = process.env.PORT ?? 4000;
+  const port = 4000;
+  console.log(port);
 
   await app.listen(port);
 
