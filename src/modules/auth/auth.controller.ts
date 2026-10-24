@@ -27,16 +27,13 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
   // -------------- Login --------------
   @Post('login')
-  async login(
-    @Body() loginDto: LoginDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
+  async login(@Body() loginDto: LoginDto) {
     const result = await this.authService.login(loginDto);
-    this.setCookies(response, result.accessToken, result.refreshToken);
-
     return {
       message: result.message,
       user: result.user,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     };
   }
 
