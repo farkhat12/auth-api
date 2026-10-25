@@ -3,9 +3,9 @@ import { LoginDto } from './dto/login.dto';
 import { normalizePhone } from '../../shared/utils/phone-normalizer';
 import * as bcrypt from 'bcrypt';
 import { UserRepository } from '../users/repositories/user.repository';
-import { createHash } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { toUserResponse } from './mappers/user.mapper';
 
 @Injectable()
 export class AuthService {
@@ -33,30 +33,22 @@ export class AuthService {
 
     const userId = user._id.toString();
 
-    const { accessToken, refreshToken } = await this.generateTokens({
+    const { access_token, refresh_token } = await this.generateTokens({
       userId,
       role: user.role,
     });
 
     return {
       message: 'Login successful',
-      accessToken,
-      refreshToken,
-      user: this.responseUser(user),
+      access_token,
+      refresh_token,
+      user: toUserResponse(user),
     };
   }
 
-  private responseUser(user: any) {
-    return {
-      id: user._id,
-      name: user.name,
-      phone: user.phone,
-      role: user.role,
-    };
-  }
   private async generateTokens(params: { userId: string; role: string }) {
     const payload = { sub: params.userId, role: params.role };
-    const [accessToken, refreshToken] = await Promise.all([
+    const [access_token, refresh_token] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
         expiresIn: '15m',
@@ -66,6 +58,6 @@ export class AuthService {
         expiresIn: '7d',
       }),
     ]);
-    return { accessToken, refreshToken };
+    return { access_token, refresh_token };
   }
 }
