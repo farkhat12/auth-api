@@ -7,6 +7,9 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { toUserResponse } from './mappers/user.mapper';
 
+const ACCESS_TTL_SECONDS = 60 * 60;
+const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -14,7 +17,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
-  // -------------- Login --------------
+  // ----------------- Login -----------------
   async login(loginDto: LoginDto) {
     const phone = normalizePhone(loginDto.phone);
     const { password } = loginDto;
@@ -39,9 +42,10 @@ export class AuthService {
     });
 
     return {
-      message: 'Login successful',
+      message: 'Login successfulll',
       access_token,
       refresh_token,
+      expiresIn: ACCESS_TTL_SECONDS,
       user: toUserResponse(user),
     };
   }
@@ -51,11 +55,11 @@ export class AuthService {
     const [access_token, refresh_token] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-        expiresIn: '15m',
+        expiresIn: ACCESS_TTL_SECONDS,
       }),
       this.jwtService.signAsync(payload, {
         secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-        expiresIn: '7d',
+        expiresIn: REFRESH_TTL_SECONDS,
       }),
     ]);
     return { access_token, refresh_token };
