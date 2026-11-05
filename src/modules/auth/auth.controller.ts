@@ -16,9 +16,11 @@ import { PhoneThrottlerGuard } from '../../common/phone-throttler.guard';
 import { CheckPhoneDto } from './dto/register.dto';
 import { normalizePhone } from '../../shared/utils/phone-normalizer';
 import { UserRepository } from '../users/repositories/user.repository';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 const COOKIE_OPTIONS: CookieOptions = {
@@ -47,13 +49,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto) {
-    const result = await this.authService.login(loginDto);
-    return {
-      message: result.message,
-      user: result.user,
-      access_token: result.access_token,
-      refresh_token: result.refresh_token,
-    };
+    return await this.authService.login(loginDto);
   }
 
   @Post('check-phone')
@@ -66,5 +62,11 @@ export class AuthController {
 
     const exists = await this.userRepository.findByPhone(phone);
     return { available: !exists };
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refresh_token);
   }
 }

@@ -10,6 +10,13 @@ import { toUserResponse } from './mappers/user.mapper';
 const ACCESS_TTL_SECONDS = 60 * 60;
 const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+export interface TokenPairResponse {
+  access_token: string;
+  refresh_token: string;
+  accessExpiresIn: number;
+  refreshExpiresIn: number;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -36,32 +43,67 @@ export class AuthService {
 
     const userId = user._id.toString();
 
-    const { access_token, refresh_token } = await this.generateTokens({
-      userId,
-      role: user.role,
-    });
+    const { access_token, refresh_token, accessExpiresIn, refreshExpiresIn } =
+      await this.issueTokens({
+        userId,
+        role: user.role,
+      });
 
     return {
-      message: 'Login successfulll',
+      message: 'Login successful',
       access_token,
       refresh_token,
-      expiresIn: ACCESS_TTL_SECONDS,
+      accessExpiresIn,
+      refreshExpiresIn,
       user: toUserResponse(user),
     };
   }
 
-  private async generateTokens(params: { userId: string; role: string }) {
+  async refresh(refreshToken: string) {
+    console.log('refreshToken', refreshToken);
+    let payload: { sub: string; role: string };
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.getOrThrow('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token'); // bad signature or expired
+    }
+
+    const user = await this.userRepository.findById(payload.sub);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const { access_token, refresh_token, accessExpiresIn, refreshExpiresIn } =
+      await this.issueTokens({
+        userId: payload.sub,
+        role: user.role,
+      });
+
+    return { access_token, refresh_token, accessExpiresIn, refreshExpiresIn };
+  }
+
+  private async issueTokens(params: {
+    userId: string;
+    role: string;
+  }): Promise<TokenPairResponse> {
     const payload = { sub: params.userId, role: params.role };
     const [access_token, refresh_token] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        secret: this.configService.getOrThrow('JWT_ACCESS_SECRET'),
         expiresIn: ACCESS_TTL_SECONDS,
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        secret: this.configService.getOrThrow('JWT_REFRESH_SECRET'),
         expiresIn: REFRESH_TTL_SECONDS,
       }),
     ]);
-    return { access_token, refresh_token };
+    return {
+      access_token,
+      refresh_token,
+      accessExpiresIn: ACCESS_TTL_SECONDS,
+      refreshExpiresIn: REFRESH_TTL_SECONDS,
+    };
   }
 }
