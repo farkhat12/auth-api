@@ -20,16 +20,7 @@ export class RegisterDto {
   phone: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   @MaxLength(100)
   password: string;
-}
-
-export class CheckPhoneDto {
-  @Matches(/^\+998\d{9}$/, {
-    message: 'Phone must be a valid Uzbekistan phone number',
-  })
-  @MaxLength(13, { message: 'Invalid phone number' })
-  @MinLength(9, { message: 'Invalid phone number' })
-  phone: string;
 }

@@ -14,6 +14,7 @@ export class UsersService {
       name: user.name,
       phone: user.phone,
       role: user.role,
+      createdAt: user.createdAt,
     };
   }
 }

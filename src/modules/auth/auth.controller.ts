@@ -1,72 +1,133 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   Res,
-  UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import type { CookieOptions } from 'express';
+import type { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { PhoneThrottlerGuard } from '../../common/phone-throttler.guard';
-import { CheckPhoneDto } from './dto/register.dto';
+import { RegisterDto } from './dto/register.dto';
 import { normalizePhone } from '../../shared/utils/phone-normalizer';
 import { UserRepository } from '../users/repositories/user.repository';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
-
-const ACCESS_TOKEN_COOKIE = 'access_token';
-const REFRESH_TOKEN_COOKIE = 'refresh_token';
-
-const isProduction = process.env.NODE_ENV === 'production';
-
-const COOKIE_OPTIONS: CookieOptions = {
-  httpOnly: true,
-  secure: isProduction,
-  sameSite: 'lax',
-};
-const ACCESS_TOKEN_OPTIONS = {
-  path: '/',
-  ...COOKIE_OPTIONS,
-  maxAge: 24 * 60 * 60 * 1000,
-};
-const REFRESH_TOKEN_OPTIONS = {
-  path: '/api/auth/refresh',
-  ...COOKIE_OPTIONS,
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-};
+import { VerifyOtpDto } from './dto/otp.dto';
+import {
+  ACCESS_TOKEN,
+  cookieOptions,
+  REFRESH_TOKEN,
+} from './constants/auth.constants';
+import { PhoneDto } from './dto/check-phone.dto';
+import { OtpService } from '../otp/otp.service';
+import { OtpPurpose } from '../otp/otp.constants';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly userRepository: UserRepository,
+    private readonly otpService: OtpService,
   ) {}
+
   // -------------- Login --------------
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: LoginDto) {
-    return await this.authService.login(loginDto);
+  async login(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.login(loginDto);
+    this.setAuthCookies(res, result);
+
+    return { message: result.message, user: result.user };
   }
 
   @Post('check-phone')
   @HttpCode(200)
-  @UseGuards(PhoneThrottlerGuard)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  async checkPhone(@Body() dto: CheckPhoneDto) {
+  async checkPhone(@Body() dto: PhoneDto) {
     const phone = normalizePhone(dto.phone);
     if (!phone) throw new BadRequestException('INVALID_PHONE');
 
     const exists = await this.userRepository.findByPhone(phone);
-    return { available: !exists };
+    if (exists) throw new ConflictException('PHONE_ALREADY_EXISTS');
+
+    return { available: true };
+  }
+
+  @Post('register')
+  @HttpCode(200)
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+  }
+
+  @Post('verify-otp')
+  @HttpCode(200)
+  async verify(
+    @Body() dto: VerifyOtpDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.verifyOtp(dto);
+
+    this.setAuthCookies(res, result);
+
+    return { message: result.message, user: result.user };
+  }
+
+  @Post('register/resend-otp')
+  @HttpCode(200)
+  async resendRegisterOtp(@Body() dto: PhoneDto) {
+    const phone = normalizePhone(dto.phone);
+    return await this.otpService.sendOtp(phone, OtpPurpose.REGISTER);
+  }
+
+  @Post('forgot-password/resend-otp')
+  @HttpCode(200)
+  async resendForgot(@Body() dto: PhoneDto) {
+    return await this.otpService.sendOtp(dto.phone, OtpPurpose.FORGOT_PASSWORD);
   }
 
   @Post('refresh')
   @HttpCode(200)
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refresh_token);
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = req.cookies?.[REFRESH_TOKEN];
+
+    if (!refreshToken)
+      throw new UnauthorizedException('Refresh token not found in cookies');
+
+    const result = await this.authService.refresh(refreshToken);
+
+    this.setAuthCookies(res, result);
+
+    return { message: result.message, user: result.user };
+  }
+
+  private setAuthCookies(
+    res: Response,
+    tokens: {
+      access_token: string;
+      refresh_token: string;
+      accessExpiresIn: number;
+      refreshExpiresIn: number;
+    },
+  ) {
+    res.cookie(ACCESS_TOKEN, tokens.access_token, {
+      ...cookieOptions,
+      maxAge: tokens.accessExpiresIn * 1000,
+    });
+
+    res.cookie(REFRESH_TOKEN, tokens.refresh_token, {
+      ...cookieOptions,
+      maxAge: tokens.refreshExpiresIn * 1000,
+    });
   }
 }

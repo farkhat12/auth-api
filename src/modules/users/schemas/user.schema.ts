@@ -38,6 +38,9 @@ export class User {
     default: UserRole.USER,
   })
   role: UserRole;
+
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
